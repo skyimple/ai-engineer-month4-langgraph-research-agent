@@ -58,4 +58,4 @@ Environment variables are loaded from `config.env`:
 - `simple_react.py` includes UTF-8 encoding setup for Windows stdout/stderr/stdin (lines 6-9)
 - `calculator_tool` validates input characters before eval() for security
 - `src/config.py` exports `llm` directly; the `get_llm()` function is defined but unused
-- Environment is loaded from `config.env` (also copies to `.env` which is gitignored)
+- Environment is loaded from `config.env`
