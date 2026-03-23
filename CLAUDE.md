@@ -12,8 +12,8 @@ Research agent that uses LangGraph's StateGraph for workflow orchestration. The 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the LangGraph research agent (generates a report on AI)
-python src/main.py
+# Run the LangGraph research agent (topic from argument or interactive input)
+python -m src.main "AI"
 
 # Run the interactive ReAct agent (legacy manual loop)
 python simple_react.py
