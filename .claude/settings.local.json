@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(pip install:*)",
+      "Bash(echo:*)",
+      "Bash(python:*)",
+      "Bash(python simple_react.py:*)",
+      "Bash(chcp:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \"\nimport sys\nsys.stdout.reconfigure\\(encoding='utf-8'\\)\nfrom src.config import llm\nfrom langchain_core.messages import HumanMessage\nresult = llm.invoke\\([HumanMessage\\(content='你好，请介绍一下你自己'\\)]\\)\nprint\\(result.content\\)\n\")",
+      "Bash(PYTHONIOENCODING=utf-8 python simple_react.py << 'EOF'\n你了解马斯克这个人吗？\nquit\nEOF)",
+      "Bash(cls:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
