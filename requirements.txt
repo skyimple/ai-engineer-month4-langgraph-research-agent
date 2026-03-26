@@ -1,3 +1,4 @@
+# Existing dependencies
 langgraph
 langchain
 langchain-openai
@@ -5,3 +6,16 @@ langchain-community
 langchain-core
 python-dotenv
 duckduckgo-search
+
+# Phase 0 - LangSmith Tracing
+langsmith
+
+# Phase 0 - Phoenix Observability
+arize-phoenix
+
+# Phase 0 - NeMo Guardrails
+nemoguardrails
+
+# Phase 0 - DeepEval Evaluation
+deepeval
+pytest

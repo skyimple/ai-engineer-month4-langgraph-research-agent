@@ -13,6 +13,7 @@ if sys.platform == 'win32':
 
 from src.graph import graph
 from src.nodes import planner_node, researcher_node, writer_node, saver_node
+from src.guardrails.rails import check_input_guardrails
 
 
 def get_topic_from_args():
@@ -71,6 +72,12 @@ def handle_writer_interrupt(state):
 
 def run_research(topic: str):
     """Run the research agent with human-in-the-loop."""
+    # Check input with Guardrails
+    is_safe, safety_message = check_input_guardrails(topic)
+    if not is_safe:
+        print(safety_message)
+        return None
+
     thread_id = f"research_{topic}_{id(topic)}"
     config = {"configurable": {"thread_id": thread_id}}
 

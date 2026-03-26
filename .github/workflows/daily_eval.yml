@@ -1,0 +1,75 @@
+name: Daily Research Agent Evaluation
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Run at 8:00 AM UTC daily
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create config.env
+        run: |
+          echo "DASHSCOPE_API_KEY=${{ secrets.DASHSCOPE_API_KEY }}" > config.env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> config.env
+          echo "LANGSMITH_PROJECT=research-agent-eval" >> config.env
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+
+      - name: Run evaluation
+        run: |
+          python evals/runners/daily_eval.py
+
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-report
+          path: evals/reports/daily_eval_*.json
+          retention-days: 30
+
+      - name: Comment on latest report
+        if: always()
+        run: |
+          echo "## Daily Evaluation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          latest_report=$(ls -t evals/reports/daily_eval_*.json | head -1)
+          if [ -f "$latest_report" ]; then
+            echo "### Summary" >> $GITHUB_STEP_SUMMARY
+            python -c "
+            import json
+            with open('$latest_report') as f:
+                report = json.load(f)
+            print(f'- Topics: {report[\"topic_count\"]}')
+            print(f'- Success Rate: {report[\"success_count\"]}/{report[\"topic_count\"]}')
+            print(f'- Overall Score: {report[\"overall_score\"]:.4f}')
+            print('')
+            print('### Metrics')
+            print(f'- Faithfulness: {report[\"metrics\"][\"faithfulness\"][\"average\"]:.4f}')
+            print(f'- Relevance: {report[\"metrics\"][\"relevance\"][\"average\"]:.4f}')
+            print(f'- Source Accuracy: {report[\"metrics\"][\"source_accuracy\"][\"average\"]:.4f}')
+            " >> $GITHUB_STEP_SUMMARY
+          fi

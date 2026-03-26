@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from src.config import llm
+from src.config import llm, get_llm, traceable
 from src.tools import search_tool
 
 
@@ -30,12 +30,14 @@ def clean_state_strings(state: dict) -> dict:
     return cleaned
 
 
-def planner_node(state: dict, original_steps: list = None) -> dict:
+@traceable(metadata={"version": "1.0", "node": "planner"})
+def planner_node(state: dict, original_steps: list = None, llm=None) -> dict:
     """Plan the research approach by calling LLM with search tool.
 
     Args:
         state: Current research state with 'topic' and optional 'user_feedback'
         original_steps: Original research steps (when modifying)
+        llm: Optional LLM instance for A/B testing
 
     Returns:
         Updated state with 'research_steps' list
@@ -67,7 +69,8 @@ def planner_node(state: dict, original_steps: list = None) -> dict:
 每个步骤应该是一个具体的搜索查询或研究任务。"""
 
     # Call LLM directly (without bind_tools to get text response)
-    response = llm.invoke([
+    actual_llm = llm or get_llm()
+    response = actual_llm.invoke([
         HumanMessage(content=planner_prompt)
     ])
 
@@ -101,6 +104,7 @@ def planner_node(state: dict, original_steps: list = None) -> dict:
     return {"research_steps": research_steps}
 
 
+@traceable(metadata={"version": "1.0", "node": "researcher"})
 def researcher_node(state: dict) -> dict:
     """Conduct research by executing search for each step.
 
@@ -149,11 +153,13 @@ def researcher_node(state: dict) -> dict:
     return {"messages": messages, "sources": sources}
 
 
-def writer_node(state: dict) -> dict:
+@traceable(metadata={"version": "1.0", "node": "writer"})
+def writer_node(state: dict, llm=None) -> dict:
     """Write the research report using collected information.
 
     Args:
         state: Current state with 'messages', 'sources', 'research_steps', and optional 'user_feedback'
+        llm: Optional LLM instance for A/B testing
 
     Returns:
         Updated state with 'report_draft'
@@ -204,7 +210,8 @@ def writer_node(state: dict) -> dict:
 请直接输出Markdown格式的研究报告，不要添加额外的解释。"""
 
     # Call LLM to generate report
-    response = llm.invoke([
+    actual_llm = llm or get_llm()
+    response = actual_llm.invoke([
         HumanMessage(content=writer_prompt)
     ])
 
@@ -214,6 +221,7 @@ def writer_node(state: dict) -> dict:
     return {"report_draft": report_draft}
 
 
+@traceable(metadata={"version": "1.0", "node": "saver"})
 def saver_node(state: dict) -> dict:
     """Save the report to a markdown file.
 
