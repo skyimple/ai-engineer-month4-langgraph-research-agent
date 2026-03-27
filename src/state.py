@@ -15,3 +15,4 @@ class ResearchState(TypedDict):
     report_draft: str
     final_markdown_path: str
     user_feedback: str = ""
+    error_message: str = ""

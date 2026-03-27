@@ -138,13 +138,20 @@ def run_research(topic: str):
 
                 # Manually call researcher with the NEW research_steps
                 print("\n🔍 使用新计划进行搜索...")
+                import sys
+                sys.stdout.flush()
                 researcher_result = researcher_node(result)
                 result.update(researcher_result)
+                print(f"  ✅ 搜索完成，收集到 {len(result.get('sources', []))} 个来源")
+                sys.stdout.flush()
 
                 # Manually call writer
                 print("\n✍️  生成报告...")
+                sys.stdout.flush()
                 writer_result = writer_node(result)
                 result.update(writer_result)
+                print("  ✅ 报告生成完成")
+                sys.stdout.flush()
                 # result now has report_draft, break to writer interrupt loop
                 break
         else:

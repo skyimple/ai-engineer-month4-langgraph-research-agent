@@ -10,6 +10,41 @@ from src.tools import search_tool
 from src.guardrails.rails import check_output_guardrails
 
 
+import sys
+
+# BadRequestError for handling DashScope content filter errors
+try:
+    from openai import BadRequestError
+except ImportError:
+    BadRequestError = None
+
+
+def is_content_filter_error(error: Exception) -> bool:
+    """Check if the error is a DashScope content filter rejection.
+
+    Args:
+        error: The exception to check
+
+    Returns:
+        True if this is a content filter error, False otherwise
+    """
+    if BadRequestError is None:
+        return False
+
+    if not isinstance(error, BadRequestError):
+        return False
+
+    error_str = str(error).lower()
+    # DashScope content filter errors typically contain these indicators
+    content_filter_indicators = [
+        "data_inspection_failed",
+        "content filter",
+        "content_filter",
+        "inappropriate content",
+        "sensitive content",
+    ]
+    return any(indicator in error_str for indicator in content_filter_indicators)
+
 def clean_string(s: str) -> str:
     """Remove surrogate characters that cause encoding issues."""
     return s.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
@@ -71,9 +106,27 @@ def planner_node(state: dict, original_steps: list = None, llm=None) -> dict:
 
     # Call LLM directly (without bind_tools to get text response)
     actual_llm = llm or get_llm()
-    response = actual_llm.invoke([
-        HumanMessage(content=planner_prompt)
-    ])
+    try:
+        response = actual_llm.invoke([
+            HumanMessage(content=planner_prompt)
+        ])
+    except BadRequestError as e:
+        if is_content_filter_error(e):
+            error_msg = (
+                "研究计划生成被内容安全过滤器拦截。\n"
+                "可能原因：研究主题触及了API安全限制。\n\n"
+                "建议：\n"
+                "1. 尝试修改研究主题的表述\n"
+                "2. 使用更宽泛或学术性的表述"
+            )
+            print(f"\n⚠️ 内容安全过滤器拦截: {error_msg}")
+            # Return error state - user can retry with modified topic
+            return {
+                "research_steps": [],
+                "error_message": f"CONTENT_FILTER_ERROR: {error_msg}"
+            }
+        else:
+            raise
 
     # Parse response to get research steps
     research_steps = []
@@ -98,8 +151,13 @@ def planner_node(state: dict, original_steps: list = None, llm=None) -> dict:
             ]
 
     # If still empty, keep original research_steps if modifying, otherwise use fallback
-    if not research_steps and not user_feedback:
-        research_steps = [f"{topic}的基本概念", f"{topic}的最新发展", f"{topic}的应用场景"]
+    if not research_steps:
+        if user_feedback and original_steps:
+            # When modifying, prefer to keep original steps if LLM fails
+            research_steps = original_steps
+            print(f"⚠️ 无法生成新计划，保留原计划")
+        elif not user_feedback:
+            research_steps = [f"{topic}的基本概念", f"{topic}的最新发展", f"{topic}的应用场景"]
 
     print(f"Generated {len(research_steps)} research steps")
     return {"research_steps": research_steps}
@@ -125,7 +183,7 @@ def researcher_node(state: dict) -> dict:
     sources = list(state.get("sources", []))
 
     for i, step in enumerate(research_steps):
-        print(f"  [{i+1}/{len(research_steps)}] Searching: {step}")
+        print(f"  [{i+1}/{len(research_steps)}] Searching: {step}", flush=True)
 
         # Execute search tool
         result = search_tool.invoke(step)
@@ -150,7 +208,7 @@ def researcher_node(state: dict) -> dict:
                     if source_entry not in sources:
                         sources.append(source_entry)
 
-    print(f"Collected {len(sources)} unique sources")
+    print(f"Collected {len(sources)} unique sources", flush=True)
 
     # Check output guardrails before returning
     if messages:
@@ -219,9 +277,29 @@ def writer_node(state: dict, llm=None) -> dict:
 
     # Call LLM to generate report
     actual_llm = llm or get_llm()
-    response = actual_llm.invoke([
-        HumanMessage(content=writer_prompt)
-    ])
+    try:
+        response = actual_llm.invoke([
+            HumanMessage(content=writer_prompt)
+        ])
+    except BadRequestError as e:
+        if is_content_filter_error(e):
+            error_msg = (
+                "报告生成被内容安全过滤器拦截。\n"
+                "可能原因：研究主题或生成内容触及了API安全限制。\n\n"
+                "建议：\n"
+                "1. 尝试修改研究主题的表述\n"
+                "2. 使用 'modify: <修改指令>' 提供更具体的撰写方向\n"
+                "3. 尝试缩短或简化研究范围"
+            )
+            print(f"\n⚠️ 内容安全过滤器拦截: {error_msg}")
+            # Return error state with empty report_draft and error message
+            return {
+                "report_draft": "",
+                "error_message": f"CONTENT_FILTER_ERROR: {error_msg}"
+            }
+        else:
+            # Re-raise for other BadRequestError types
+            raise
 
     report_draft = response.content if hasattr(response, "content") else str(response)
 
