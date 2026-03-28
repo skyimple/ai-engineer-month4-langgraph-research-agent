@@ -3,7 +3,7 @@ import ast
 import operator
 
 from langchain_core.tools import tool
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 # Supported operators for safe AST evaluation
 _OPERATORS = {
