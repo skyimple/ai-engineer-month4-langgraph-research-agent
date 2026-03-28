@@ -34,8 +34,7 @@ jobs:
       - name: Create config.env
         run: |
           echo "DASHSCOPE_API_KEY=${{ secrets.DASHSCOPE_API_KEY }}" > config.env
-          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> config.env
-          echo "LANGCHAIN_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> config.env
+          echo "LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}" >> config.env
           echo "LANGCHAIN_TRACING_V2=false" >> config.env
           echo "LANGSMITH_PROJECT=research-agent-eval" >> config.env
 
