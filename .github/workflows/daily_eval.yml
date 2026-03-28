@@ -8,6 +8,7 @@ on:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -34,14 +35,15 @@ jobs:
         run: |
           echo "DASHSCOPE_API_KEY=${{ secrets.DASHSCOPE_API_KEY }}" > config.env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> config.env
+          echo "LANGCHAIN_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> config.env
+          echo "LANGCHAIN_TRACING_V2=false" >> config.env
           echo "LANGSMITH_PROJECT=research-agent-eval" >> config.env
-        env:
-          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
 
       - name: Run evaluation
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
-          python evals/runners/daily_eval.py
+          python -u evals/runners/daily_eval.py 2>&1 || (echo "::error::Evaluation failed with exit code $?" && exit 1)
 
       - name: Upload evaluation report
         uses: actions/upload-artifact@v4
