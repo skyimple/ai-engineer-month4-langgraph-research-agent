@@ -35,6 +35,9 @@ wheels/
 # Claude Code
 .claude/
 
+# Playwright MCP
+.playwright-mcp/
+
 # Agent output
 outputs/
 

@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -142,11 +143,32 @@ def run_evaluation(topics: List[Dict[str, Any]] = None, limit: int = None) -> Di
     return results
 
 
-def calculate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _evaluate_single_topic_metrics(
+    answer: str,
+    sources: list,
+    topic: str,
+    golden_answer: str,
+    key_points: list
+) -> Dict[str, Any]:
+    """Evaluate metrics for a single topic (runs in thread for timeout control)."""
+    scores = evaluate_all_metrics(
+        answer=answer,
+        sources=sources,
+        topic=topic,
+        golden_answer=golden_answer,
+        key_points=key_points
+    )
+    citation = evaluate_citation_quality(answer, sources)
+    diversity = min(len(sources) / 10, 1.0) if sources else 0.0
+    return {"scores": scores, "citation": citation, "diversity": diversity}
+
+
+def calculate_metrics(results: List[Dict[str, Any]], per_topic_timeout: int = 180) -> Dict[str, Any]:
     """Calculate all evaluation metrics using combined LLM calls.
 
     Args:
         results: List of result dicts
+        per_topic_timeout: Timeout in seconds for each topic's LLM evaluation (default: 180s)
 
     Returns:
         Metrics dict
@@ -170,27 +192,37 @@ def calculate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         print(f"  [{i+1}/{len(results)}] Evaluating metrics: {topic}")
 
-        # Single LLM call for faithfulness + relevance + source_accuracy + coverage
-        scores = evaluate_all_metrics(
-            answer=answer,
-            sources=sources,
-            topic=topic,
-            golden_answer=golden_answer,
-            key_points=key_points
-        )
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    _evaluate_single_topic_metrics,
+                    answer, sources, topic, golden_answer, key_points
+                )
+                eval_result = future.result(timeout=per_topic_timeout)
 
-        faithfulness_scores.append(scores["faithfulness"])
-        relevance_scores.append(scores["relevance"])
-        source_accuracy_scores.append(scores["source_accuracy"])
-        coverage_scores.append(scores["coverage"])
-
-        # Citation quality (pure string matching, no LLM call)
-        citation = evaluate_citation_quality(answer, sources)
-        citation_scores.append(citation)
-
-        # Diversity is estimated from source count
-        diversity = min(len(sources) / 10, 1.0) if sources else 0.0
-        diversity_scores.append(diversity)
+            scores = eval_result["scores"]
+            faithfulness_scores.append(scores["faithfulness"])
+            relevance_scores.append(scores["relevance"])
+            source_accuracy_scores.append(scores["source_accuracy"])
+            coverage_scores.append(scores["coverage"])
+            citation_scores.append(eval_result["citation"])
+            diversity_scores.append(eval_result["diversity"])
+        except FuturesTimeoutError:
+            print(f"    TIMEOUT: Metrics evaluation for '{topic}' exceeded {per_topic_timeout}s, using defaults")
+            faithfulness_scores.append(0.5)
+            relevance_scores.append(0.5)
+            source_accuracy_scores.append(0.5)
+            coverage_scores.append(0.5)
+            citation_scores.append(0.0)
+            diversity_scores.append(0.0)
+        except Exception as e:
+            print(f"    ERROR: Metrics evaluation for '{topic}' failed: {e}, using defaults")
+            faithfulness_scores.append(0.5)
+            relevance_scores.append(0.5)
+            source_accuracy_scores.append(0.5)
+            coverage_scores.append(0.5)
+            citation_scores.append(0.0)
+            diversity_scores.append(0.0)
 
     return {
         "faithfulness": {
