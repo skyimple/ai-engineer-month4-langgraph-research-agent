@@ -24,18 +24,32 @@ def get_topic_from_args():
     return args.topic if args.topic else input("请输入研究主题: ")
 
 
-def handle_planner_interrupt(state):
-    """Handle interrupt after planner node - show research steps and get user feedback."""
-    print("\n" + "="*60)
-    print("📋 研究计划已生成:")
-    print("="*60)
-    for i, step in enumerate(state.get("research_steps", []), 1):
-        print(f"  {i}. {step}")
-    print("="*60)
+def _handle_interrupt(state, title, content_lines, approve_prompt, modify_prompt):
+    """Shared interrupt handler — display content and prompt for approve/modify.
+
+    Args:
+        state: Current graph state dict.
+        title: Header line (e.g. "📋 研究计划已生成:").
+        content_lines: List of strings to display, or a single string.
+        approve_prompt: Prompt text for approve action.
+        modify_prompt: Prompt text for modify action.
+
+    Returns:
+        "approve" or "modify: <instruction>"
+    """
+    print("\n" + "=" * 60)
+    print(title)
+    print("=" * 60)
+    if isinstance(content_lines, str):
+        print(content_lines)
+    else:
+        for line in content_lines:
+            print(line)
+    print("=" * 60)
 
     while True:
         try:
-            user_input = input("\n输入 'approve' 继续，或 'modify: <修改指令>' 修改计划: ").strip()
+            user_input = input(f"\n{approve_prompt}，或 {modify_prompt}: ").strip()
             if user_input.lower() == "approve":
                 return "approve"
             elif user_input.lower().startswith("modify:"):
@@ -46,29 +60,30 @@ def handle_planner_interrupt(state):
         except (KeyboardInterrupt, EOFError):
             print("\n\n操作已取消。")
             sys.exit(0)
+
+
+def handle_planner_interrupt(state):
+    """Handle interrupt after planner node."""
+    steps = state.get("research_steps", [])
+    lines = [f"  {i}. {step}" for i, step in enumerate(steps, 1)]
+    return _handle_interrupt(
+        state,
+        title="📋 研究计划已生成:",
+        content_lines=lines,
+        approve_prompt="输入 'approve' 继续",
+        modify_prompt="'modify: <修改指令>' 修改计划",
+    )
 
 
 def handle_writer_interrupt(state):
-    """Handle interrupt after writer node - show report draft and get user feedback."""
-    print("\n" + "="*60)
-    print("📄 报告草稿:")
-    print("="*60)
-    print(state.get("report_draft", ""))
-    print("="*60)
-
-    while True:
-        try:
-            user_input = input("\n输入 'approve' 保存，或 'modify: <修改指令>' 修改报告: ").strip()
-            if user_input.lower() == "approve":
-                return "approve"
-            elif user_input.lower().startswith("modify:"):
-                instruction = user_input[7:].strip()
-                return f"modify: {instruction}"
-            else:
-                print("无效输入，请输入 'approve' 或 'modify: <修改指令>'")
-        except (KeyboardInterrupt, EOFError):
-            print("\n\n操作已取消。")
-            sys.exit(0)
+    """Handle interrupt after writer node."""
+    return _handle_interrupt(
+        state,
+        title="📄 报告草稿:",
+        content_lines=state.get("report_draft", ""),
+        approve_prompt="输入 'approve' 保存",
+        modify_prompt="'modify: <修改指令>' 修改报告",
+    )
 
 
 def run_research(topic: str):
@@ -138,7 +153,6 @@ def run_research(topic: str):
 
                 # Manually call researcher with the NEW research_steps
                 print("\n🔍 使用新计划进行搜索...")
-                import sys
                 sys.stdout.flush()
                 researcher_result = researcher_node(result)
                 result.update(researcher_result)
