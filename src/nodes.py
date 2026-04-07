@@ -5,8 +5,8 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from src.config import llm, get_llm, traceable
-from src.tools import search_tool
+from src.config import get_llm, traceable
+from src.tools import search_tool, format_search_results
 from src.guardrails.rails import check_output_guardrails
 
 
@@ -167,12 +167,17 @@ def planner_node(state: dict, original_steps: list = None, llm=None) -> dict:
 def researcher_node(state: dict) -> dict:
     """Conduct research by executing search for each step.
 
+    Uses parallel execution (2 concurrent searches) to speed up research
+    while respecting DuckDuckGo rate limits.
+
     Args:
         state: Current state with 'research_steps'
 
     Returns:
         Updated state with 'messages' and 'sources'
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     # Clean state strings to remove surrogate characters
     state = clean_state_strings(state)
 
@@ -182,36 +187,46 @@ def researcher_node(state: dict) -> dict:
     messages = list(state.get("messages", []))
     sources = list(state.get("sources", []))
 
-    for i, step in enumerate(research_steps):
-        print(f"  [{i+1}/{len(research_steps)}] Searching: {step}", flush=True)
+    MAX_CONCURRENT = 2
 
-        # Add delay between searches to avoid DuckDuckGo rate limiting
-        if i > 0:
-            import time
-            time.sleep(3)
+    def _run_search(idx, step):
+        """Execute a single search step (thread-safe)."""
+        print(f"  [{idx+1}/{len(research_steps)}] Searching: {step}", flush=True)
+        results = search_tool.invoke(step)
+        return idx, step, results
 
-        # Execute search tool
-        result = search_tool.invoke(step)
+    # Execute searches with concurrent pool (max 2 in-flight to respect rate limits)
+    all_results = []
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT) as executor:
+        futures = [
+            executor.submit(_run_search, i, step)
+            for i, step in enumerate(research_steps)
+        ]
+        for future in as_completed(futures):
+            try:
+                idx, step, search_results = future.result()
+                all_results.append((idx, step, search_results))
+            except Exception as e:
+                print(f"  Search failed: {e}", flush=True)
 
-        # Add to messages
+    # Sort by original index to maintain message order
+    all_results.sort(key=lambda x: x[0])
+
+    for idx, step, search_results in all_results:
+        # Format for message history (LLM reads this)
+        formatted = format_search_results(search_results)
         messages.append(HumanMessage(content=f"Research step: {step}"))
-        messages.append(AIMessage(content=result))
+        messages.append(AIMessage(content=formatted))
 
-        # Extract source info from result
-        lines = result.split("\n")
-        for line in lines:
-            if line.strip().startswith("- "):
-                # Parse "- Title: URL" format
-                parts = line[2:].split(": ", 1)
-                if len(parts) >= 1:
-                    title = parts[0].strip()
-                    url = parts[1].split("\n")[0].strip() if len(parts) > 1 else ""
-                    snippet = line.split("\n  ")[1] if "\n  " in line else ""
-
-                    # Avoid duplicates
-                    source_entry = {"title": title, "url": url, "snippet": snippet}
-                    if source_entry not in sources:
-                        sources.append(source_entry)
+        # Use structured results directly (no fragile string parsing)
+        for r in search_results:
+            source_entry = {
+                "title": r.get("title", ""),
+                "url": r.get("href", ""),
+                "snippet": r.get("body", ""),
+            }
+            if source_entry not in sources and source_entry["title"]:
+                sources.append(source_entry)
 
     print(f"Collected {len(sources)} unique sources", flush=True)
 

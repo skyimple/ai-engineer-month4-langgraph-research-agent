@@ -7,10 +7,6 @@ load_dotenv('config.env')
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-api_key = os.getenv("DASHSCOPE_API_KEY")
-if not api_key:
-    raise ValueError("未找到 DASHSCOPE_API_KEY")
-
 # ============== LangSmith 配置 ==============
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
 LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "research-agent")
@@ -73,21 +69,35 @@ AB_TEST_MODEL_A = os.getenv("AB_TEST_MODEL_A", "qwen3.5-plus")
 AB_TEST_MODEL_B = os.getenv("AB_TEST_MODEL_B", "qwen3.5-plus")
 
 # ============== LLM 初始化 ==============
-llm = ChatOpenAI(
-    model="qwen3.5-plus",
-    temperature=0.7,
-    max_tokens=2048,
-    streaming=False,
-    api_key=api_key,
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
-)
+import threading
+
+_llm = None
+_llm_lock = threading.Lock()
 
 def get_llm():
-    """Return the configured LLM instance."""
-    return llm
+    """Return the configured LLM instance (lazy initialization, thread-safe)."""
+    global _llm
+    if _llm is None:
+        with _llm_lock:
+            if _llm is None:
+                api_key = os.getenv("DASHSCOPE_API_KEY")
+                if not api_key:
+                    raise ValueError("未找到 DASHSCOPE_API_KEY")
+                _llm = ChatOpenAI(
+                    model="qwen3.5-plus",
+                    temperature=0.7,
+                    max_tokens=2048,
+                    streaming=False,
+                    api_key=api_key,
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                )
+    return _llm
 
 def get_llm_for_ab_version(version: str = None):
     """Return LLM instance for A/B testing."""
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise ValueError("未找到 DASHSCOPE_API_KEY")
     version = version or AB_TEST_PROMPT_VERSION
     model_name = AB_TEST_MODEL_B if version == "B" else AB_TEST_MODEL_A
     return ChatOpenAI(

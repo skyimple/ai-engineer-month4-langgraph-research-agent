@@ -52,10 +52,14 @@ DANGEROUS_PATTERNS = [
     r"\bexec\s*\(",
     r"\bos\s*\.",
 
-    # Shell metacharacters (command injection)
-    r"[;|`$\<]",  # ;, |, `, $, < for command chaining
-    r">\s*",       # Output redirection
-    r"&\s*$",     # Background execution
+    # Shell metacharacters (command injection — multi-char sequences only)
+    r";\s*(?:rm|cat|bash|sh|curl|wget|python|perl|ruby|nc|ncat|socat|chmod|chown|kill|mount|umount|dd|mkfifo)\b",
+    r"\|\s*(?:bash|sh|cat|python|perl|ruby|nc|ncat|socat|curl|wget|tee|head|tail|sort|uniq|wc|tr|sed|awk|grep)\b",
+    r"`[^`]+`",       # Backtick-wrapped command: `command`
+    r"\$\(",          # Command substitution: $(command)
+    r"<\(",           # Process substitution: <(command)
+    r">\s*/",         # Output redirection to a path: > /tmp/file
+    r"\b&\s*$",       # Background execution at word boundary: command&
 
     # XSS patterns
     r"<\s*script",

@@ -38,30 +38,10 @@ def run_agent_for_topic(topic: str, model: str = None) -> Dict[str, Any]:
     Returns:
         Dict with 'topic', 'answer', 'sources', 'report_path'
     """
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.checkpoint.memory import MemorySaver
-    from src.state import ResearchState
-    from src.nodes import planner_node, researcher_node, writer_node, saver_node
+    from src.graph import build_graph
 
     # Create evaluation graph without interrupts for automated evaluation
-    eval_workflow = StateGraph(ResearchState)
-
-    eval_workflow.add_node("planner", planner_node)
-    eval_workflow.add_node("researcher", researcher_node)
-    eval_workflow.add_node("writer", writer_node)
-    eval_workflow.add_node("saver", saver_node)
-
-    eval_workflow.add_edge(START, "planner")
-    eval_workflow.add_edge("planner", "researcher")
-    eval_workflow.add_edge("researcher", "writer")
-    eval_workflow.add_edge("writer", "saver")
-    eval_workflow.add_edge("saver", END)
-
-    checkpointer = MemorySaver()
-    compiled = eval_workflow.compile(
-        checkpointer=checkpointer,
-        interrupt_before=[]  # No interrupts for evaluation
-    )
+    compiled = build_graph(interrupt_before=[])
 
     # Initial state
     initial_state = {
