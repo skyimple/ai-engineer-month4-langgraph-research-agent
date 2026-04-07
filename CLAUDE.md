@@ -15,14 +15,19 @@ pip install -r requirements.txt
 # Run the LangGraph research agent (interactive)
 python -m src.main "AI"
 
-# Run A/B comparison test
-python ab_test.py "AI"
+# Run pytest suite (38+ tests in tests/)
+pytest tests/ -v
+pytest tests/test_nodes.py -v              # single test file
+pytest tests/test_nodes.py::TestPlannerJsonParsing::test_parse_clean_json  # single test
 
 # Run evaluation system (all 30 topics)
 python evals/runners/daily_eval.py
 python evals/runners/daily_eval.py --limit 5  # limit topics
 python evals/runners/daily_eval.py --output-dir evals/reports  # custom output dir
 python evals/runners/daily_eval.py --dataset evals/datasets/topics.json  # custom dataset
+
+# Run A/B comparison test
+python ab_test.py "AI"
 
 # Run guardrails tests (standalone scripts, not pytest)
 python test_guardrails_fix.py
@@ -80,8 +85,9 @@ DuckDuckGo is used for web search (no API key required). `config.env` may contai
 - Reports saved to `outputs/{topic}_report.md`
 - Windows compatibility: extensive UTF-8 surrogate character handling throughout nodes and main
 - Test scripts are standalone (run with `python`, not `pytest`) — they use `_check_patterns` directly from guardrails
+- `conftest.py` autouse fixture sets `DASHSCOPE_API_KEY=test-key-for-unit-tests` and disables LangSmith tracing for all pytest tests
 - `simple_react.py` is a legacy pre-LangGraph ReAct loop for comparison
-- Researcher node has a 3-second delay between DuckDuckGo searches to avoid rate limiting
+- Researcher node runs up to 2 concurrent searches via `ThreadPoolExecutor` (was sequential with 3s delay)
 
 ## Gstack
 
